@@ -1,0 +1,101 @@
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Tailspin Example</title>
+    
+    <link rel="stylesheet" type="text/css" href="examples.css">
+    
+    <script type="text/javascript" src="../tailspin.js"></script>
+    
+    <script src="lib/codemirror-compressed.js"></script>
+    <link rel="stylesheet" href="lib/codemirror.css">
+    
+    <script type="text/javascript">
+        var interpreter;
+        var myConsole;
+        var myConsole_lastLogRange;
+        
+        function setup() {
+            // Create a new interpreter.
+            interpreter = new Tailspin.Interpreter();
+            
+            myConsole = CodeMirror.fromTextArea(document.getElementById("console"), {
+                mode: "text",
+                autofocus: true,
+                extraKeys: {
+                    Enter: function(cm) {}
+                  }
+              });
+            
+            // Run code on enter key.
+            myConsole.on('keyHandled', function(cMirror, name) {
+                if (name === "Enter") {
+                    var to = myConsole.posFromIndex(myConsole.getValue().length);
+                    var from = myConsole_lastLogRange;
+                    var source = cMirror.getRange(from, to);
+                    myConsole.setSelection(to);
+                    myConsole.replaceRange("\n", to);
+                    myConsole.markText(from, CodeMirror.Pos(myConsole.lastLine()), {
+                        className: "input",
+                        readOnly: true
+                      });
+                    run(source);
+                }
+            });
+            
+            // Add a single global 'console' that has a log function.
+            interpreter.global.console = {
+                log:function(msg) {consoleLog(msg, 'log');}
+            };
+            consoleLog("Welcome to Tailspin...");
+        }
+        
+        function consoleLog(msg, logClass) {
+            var from = myConsole.posFromIndex(myConsole.getValue().length);
+            myConsole.replaceRange(msg+"\n", from);
+            myConsole.markText(from, CodeMirror.Pos(myConsole.lastLine()), {
+                className: logClass,
+                readOnly: true
+              });
+            myConsole_lastLogRange = myConsole.posFromIndex(myConsole.getValue().length);
+        }
+        
+        function run(source) {
+            // Callback functions for evaluation.
+            function returnFn(result) {
+                consoleLog(result, "output");
+            }
+            function errorFn(result) {
+                consoleLog("ERROR: " + result, 'error');
+            }
+            
+            // Create an evaluation context that describes the how the code is to be executed.
+            var x = interpreter.createExecutionContext();
+            
+            // Asynchronous running is prefered, so that tailspin execution does not block the browser.
+            x.asynchronous = true;
+            
+            // Run the code.
+            interpreter.evaluateInContext(source, "console", 0, x, returnFn, errorFn, null);
+        }
+    </script>
+</head>
+
+<body onload="setup()">
+
+<textarea id="console"></textarea>
+
+<p>
+Try:
+<ul>
+<li>3+5
+<li>x = 14
+<li>x*x
+<li>function f(n) {return n*n}
+<li>f(x)
+<li>for (i=0;i<=10;i++) console.log(i)
+</ul>
+</p>
+
+</body>
+</html>

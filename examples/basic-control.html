@@ -1,0 +1,103 @@
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8">
+    <title>Tailspin Example</title>
+    
+    <link rel="stylesheet" type="text/css" href="examples.css">
+    
+    <script type="text/javascript" src="../tailspin.js"></script>
+    
+    <script src="lib/codemirror-compressed.js"></script>
+    <link rel="stylesheet" href="lib/codemirror.css">
+    
+    <script type="text/javascript">
+        var interpreter;
+        var mySource, myConsole;
+        
+        function setup() {
+            // Create a new interpreter.
+            interpreter = new Tailspin.Interpreter();
+            
+            // Add a single global 'console' that has a log function.
+            interpreter.global.console = {
+                log:function(msg) {consoleLog(msg, 'log');}
+            };
+            
+            mySource = CodeMirror.fromTextArea(document.getElementById("source"),
+                {lineNumbers:true, mode:"javascript"});
+            
+            myConsole = CodeMirror.fromTextArea(document.getElementById("console"),
+                {readOnly:true, mode:"text"});
+            
+            // Save the code on changes.
+            mySource.on('change', function(cMirror) {
+                localStorage["source"] = cMirror.getValue();
+            });
+            
+            // Load saved code.
+            var savedScript = localStorage["source"];
+            if (typeof savedScript === "string") {
+                mySource.setValue(savedScript);
+            }
+        }
+        
+        function consoleLog(msg, logClass) {
+            var from = myConsole.posFromIndex(myConsole.getValue().length);
+            myConsole.replaceRange(msg+"\n", from);
+            myConsole.markText(from, CodeMirror.Pos(myConsole.lastLine()), {className:logClass});
+        }
+        
+        function run() {
+            // Callback functions for evaluation.
+            var isDone = fales; 
+            function returnFn(result) {
+                isDone = true;           
+                consoleLog(JSON.stringify(result), "output");
+            }
+            function errorFn(result) {
+                consoleLog("ERROR: " + result, 'error');
+            }
+            
+            // Create an evaluation context that describes the how the code is to be executed.
+            var x = interpreter.createExecutionContext();
+            
+            // Asynchronous running is prefered, so that tailspin execution does not block the browser.
+            x.asynchronous = true;
+            
+            // A very simple control function that outputs the node line number and value.
+            x.control = function(n, x, next, prev) {
+                var value = "";
+                if (typeof n.value === "string" || typeof n.value === "number") {
+                    value = " '" + n.value + "'";
+                }
+                consoleLog(n.lineno + ": " + Tailspin.Definitions.tokens[n.type] + value);
+                
+                // Continue execution.
+                if (!isDone) {
+                    next(prev);
+                }
+            };
+            
+            // Run the code.
+            var source = mySource.getValue();
+            interpreter.evaluateInContext(source, "source", 0, x, returnFn, errorFn, null);
+        }
+    </script>
+</head>
+
+<body onload="setup()">
+
+<button onclick="run();">Run</button>
+
+<textarea id="source">var a = 20;
+var b = 5;
+
+function sqr(x) {
+    return x*x;
+}
+
+a = a * sqr(b);</textarea>
+<textarea id="console"></textarea>
+
+</body>
+</html>
