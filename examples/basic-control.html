@@ -49,7 +49,9 @@
         
         function run() {
             // Callback functions for evaluation.
+            var isDone = fales; 
             function returnFn(result) {
+                isDone = true;           
                 consoleLog(JSON.stringify(result), "output");
             }
             function errorFn(result) {
@@ -71,7 +73,9 @@
                 consoleLog(n.lineno + ": " + Tailspin.Definitions.tokens[n.type] + value);
                 
                 // Continue execution.
-                next(prev);
+                if (!isDone) {
+                    next(prev);
+                }
             };
             
             // Run the code.

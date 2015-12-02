@@ -257,7 +257,7 @@ var Tailspin = new function() {
     }
   };
   Tailspin.Utility = function() {
-    "use strict";
+    //"use strict";
     function applyNew(f, a) {
       return new (f.bind.apply(f, [ ,  ].concat(Array.prototype.slice.call(a))))();
     }
@@ -402,7 +402,7 @@ var Tailspin = new function() {
     return exports;
   }();
   Tailspin.Lexer = function() {
-    "use strict";
+    //"use strict";
     var Definitions = Tailspin.Definitions;
     var tk = Definitions.tokenIds;
     var opTokens = {};
@@ -846,7 +846,7 @@ var Tailspin = new function() {
     return exports;
   }();
   Tailspin.Parser = function() {
-    "use strict";
+    //"use strict";
     var Tokenizer = Tailspin.Lexer.Tokenizer;
     var Definitions = Tailspin.Definitions;
     var Dict = Tailspin.Utility.Dict;
@@ -2204,7 +2204,7 @@ var Tailspin = new function() {
     return exports;
   }();
   Tailspin.Decompiler = function() {
-    "use strict";
+    //"use strict";
     var tokens = Tailspin.Definitions.tokens;
     function indent(n, s) {
       var ss = "", d = true;
@@ -2590,7 +2590,7 @@ var Tailspin = new function() {
     return exports;
   }();
   Tailspin.Sandbox = function(interpreter) {
-    "use strict";
+    //"use strict";
     var hasDirectProperty = Tailspin.Utility.hasDirectProperty;
     var functionInternals = {
       get: function(fn) {
@@ -3108,7 +3108,7 @@ var Tailspin = new function() {
       }
     }
     var continuationMarker = {};
-    var calleeCallerPoisonFn = sandbox.eval("'use strict'; Object.getOwnPropertyDescriptor(function() {}, 'caller').get");
+    var calleeCallerPoisonFn// = sandbox.eval("Object.getOwnPropertyDescriptor(function() {}, 'caller').get");
     function Activation(f, a, callee) {
       if (f) {
         var safeParams = f.params.map(function(name) {
@@ -3216,7 +3216,7 @@ var Tailspin = new function() {
           }
         }
       },
-      construct: function(fn, a, x, next, ret, cont, brk, thrw, prev) {
+        construct: function(fn, a, x, next, ret, cont, brk, thrw, prev) {
         var newObject = sandbox.applyNew(fn, [ continuationMarker ]);
         this.call(fn, newObject, a, x, function(r, prev) {
           if (typeof r === "object" || typeof r === "function") {
@@ -3311,7 +3311,7 @@ var Tailspin = new function() {
     return delete base[name];
   }
   Tailspin.Interpreter = function() {
-    "use strict";
+    //"use strict";
     var Definitions = Tailspin.Definitions;
     var GLOBAL_CODE = 0, EVAL_CODE = 1, FUNCTION_CODE = 2;
     var exports = {};
@@ -4149,7 +4149,7 @@ var Tailspin = new function() {
       var c = n.children;
       executeGV(c[0], x, function(f, prev, r) {
         execute(c[1], x, function(a, prev) {
-          if (typeof f !== "function") {
+            if (typeof f !== "function") {
             thrw(newTypeError(f + " is not callable", c[0].filename, c[0].lineno), prev);
           } else {
             var t;
@@ -4182,8 +4182,14 @@ var Tailspin = new function() {
       }, ret, cont, brk, thrw, prev);
     };
     executeFunctions[NEW] = function exNew(n, x, next, ret, cont, brk, thrw, prev) {
-      var c = n.children;
-      executeGV(c[0], x, function(f, prev, ref) {
+        var c = n.children;
+        if (c[0].value == "Continuation") {
+            next(function(x, r) {
+                ret(x)
+            });
+            return;
+        }
+        executeGV(c[0], x, function(f, prev, ref) {
         var constructFn = function(args, prev) {
           if (typeof f !== "function") {
             thrw(newTypeError(ref + " is not a constructor", c[0].filename, c[0].lineno), prev);
@@ -4346,7 +4352,7 @@ var Tailspin = new function() {
       try {
         var ast = Tailspin.Parser.parse(s, f, l, false, sandbox);
         x.strict = !!ast.strict;
-        x.execute(ast, function(v, prev) {
+          x.execute(ast, function(v, prev) {
           ret(x.result, prev);
         }, ret, null, null, thrw, prev);
       } catch (e) {
