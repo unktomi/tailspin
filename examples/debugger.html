@@ -5,15 +5,33 @@
     
     <link rel="stylesheet" type="text/css" href="examples.css">
     
+    <script id='eff' type="text/javascript" src="Effects.js"></script>
+    <script id='eff' type="text/javascript" src="EffectTest.js"></script>
     <script type="text/javascript" src="../tailspin.js"></script>
     
-    <script src="lib/codemirror-compressed.js"></script>
+    <script src="lib/codemirror.js"></script>
     <link rel="stylesheet" href="lib/codemirror.css">
-    
+    <style type="text/css">
+      .breakpoints {width: .8em;}
+      .breakpoint { color: #822; }
+      .CodeMirror {border: 1px solid #aaa;}
+    </style>
+    <script src="lib/terminal/js/jquery-1.7.1.min.js"></script>
+    <script src="lib/terminal/js/jquery.mousewheel-min.js"></script>
+    <script src="lib/terminal/js/jquery.terminal-min.js"></script>
+    <link rel="stylesheet" href="lib/terminal/css/jquery.terminal.css">
     <script type="text/javascript">
+        var terminal
+        var evaluateInContext = function (cmd) {
+            if (undefined != cmd) terminal.echo("Not running");
+        }
+        function initTerm(term) {
+            terminal = term;
+        }
         var interpreter;
         var tailspinDebugger;
         var mySource, myConsole;
+        var breakpoint = {}
         
         window.onload = function() {
             // Create a new interpreter.
@@ -26,15 +44,49 @@
             };
             
             mySource = CodeMirror.fromTextArea(document.getElementById("source"),
-                {lineNumbers:true, mode:"javascript"});
+        {lineNumbers:true, mode:"javascript",  gutters: ["CodeMirror-linenumbers", "breakpoints"]});
+
+mySource.on("gutterClick", function(cm, n) {
+  var info = cm.lineInfo(n);
+  breakpoint[n] = info.gutterMarkers == null;
+  cm.setGutterMarker(n, "breakpoints", !breakpoint[n] ? null : makeMarker());
+});
+
+function makeMarker() {
+  var marker = document.createElement("div");
+  marker.style.color = "#822";
+  marker.innerHTML = "●";
+  return marker;
+}
+
+        var testCode = String(EffectTest);
+
+        var source = MetaContinuation +"\n"+ Effects +"\n{"+testCode.substring(testCode.indexOf("\n"));
+        mySource.setValue(source);
+//            myConsole = CodeMirror.fromTextArea(document.getElementById("console"),
+//                {readOnly:true, mode:"text"});
             
-            myConsole = CodeMirror.fromTextArea(document.getElementById("console"),
-                {readOnly:true, mode:"text"});
-            
+        jQuery(function($, undefined) {
+                $('#console').terminal(function(command, term) {
+                        initTerm(term);
+                        evaluateInContext(command);
+                    }, {
+                        greetings: 'Evaluate:',
+                            name: 'js_demo',
+                            height: '30%',
+                            history: true,
+                            onInit: initTerm,
+                            prompt: 'js> '});
+            });
+
+
             // Save the code on changes.
             mySource.on('change', function(cMirror) {
                 localStorage["debugger-source"] = cMirror.getValue();
-            });
+        });
+
+        
+
             
             // Load saved code.
             var savedScript = localStorage["debugger-source"];
@@ -42,14 +94,12 @@
                 mySource.setValue(savedScript);
             }
         }
-        
         function consoleLog(msg, logClass) {
-            var from = myConsole.posFromIndex(myConsole.getValue().length);
-            myConsole.replaceRange(msg+"\n", from);
-            myConsole.markText(from, CodeMirror.Pos(myConsole.lastLine()), {className:logClass});
+            terminal.echo(msg)
         }
         
         function Debugger() {
+            
             this.state = "stopped";
             this.currentLine = -1;
             this.continuation = null;
@@ -61,8 +111,9 @@
             this.stepIntoButton = document.getElementById("step-into-button");
             this.stepOverButton = document.getElementById("step-over-button");
             this.stepOutButton = document.getElementById("step-out-button");
+            this.stepBackButton = document.getElementById("step-back-button");
             
-            this.updateButtons();
+           this.updateButtons();
         }
         
         Debugger.prototype = {
@@ -75,6 +126,7 @@
                 this.stepIntoButton.disabled = !running; // Can start by stepping over or into.
                 this.stepOverButton.disabled = !running;
                 this.stepOutButton.disabled = this.state !== "paused";
+                this.stepBackButton.disabled = this.state !== "paused" || !this.backContinuation;
             },
             end: function(output, outputClass) {
                 if (output) {
@@ -83,14 +135,13 @@
                 this.state = "stopped";
                 this.continuation = null;
                 mySource.removeLineClass(this.highlightedLine, 'background', 'current-line');
-                
                 this.updateButtons();
             },
             returnFn: function(result) {
                 this.end(JSON.stringify(result), "output");
             },
             errorFn: function(result) {
-                this.end("ERROR: "+JSON.stringify(result), "error");
+                 this.end("ERROR: "+JSON.stringify(result), "error");
             },
             start: function() {
                 // Create an evaluation context that describes the how the code is to be executed.
@@ -103,7 +154,23 @@
                 
                 this.currentLine = -1;
                 this.stackDepth = 0;
-                
+                evaluateInContext = function(command) {
+                            try {
+                                var cx = x.copy();
+                                cx.asynchronous = false;
+                                var isDone = false;
+                                cx.control = function(n, x, next, prev) {
+                                    if(!isDone) next(prev)
+                                }
+                                interpreter.evaluateInContext(command, "", 0, cx, function(result) {
+                                      if (undefined != result) terminal.echo(String(result)); isDone = true;
+                                 }, function(err) { 
+                                      terminal.error(String(err)); isDone = true;
+                                }, null)
+                            } catch(e) {
+                                term.error(new String(e));
+                            }
+                }
                 this.updateButtons();
                 
                 // Run the code.
@@ -131,6 +198,11 @@
             stepOut: function() {
                 this.continueWithState("step-out");
             },
+            stepBack: function() {
+                this.continuation = this.backContinuation;
+                this.backContinuation = null;
+                this.continueWithState("step-back");
+            },
             pause: function() {
                 this.state = "paused";
             },
@@ -150,19 +222,26 @@
                     mySource.removeLineClass(this.highlightedLine, 'background', 'current-line');
                     next(prev);
                   }.bind(this);
+                // Save a continuation which will continue the execution of the code.
+                this.backContinuation = !prev ? null: function() {
+                    this.updateButtons();
+                    mySource.removeLineClass(this.highlightedLine, 'background', 'current-line');
+                    if (prev) prev();
+                  }.bind(this);
                 
                 // Highlight the new line.
                 this.highlightedLine = n.lineno-1;
-                mySource.addLineClass(this.highlightedLine, 'background', 'current-line');
-                
+        mySource.addLineClass(this.highlightedLine, 'background', 'current-line');
+        mySource.scrollIntoView({line: this.highlightedLine});
                 this.updateButtons();
             },
             
-            control: function(n, x, next, prev) {
+        control: function(n, x, next, prev) {
+
                 switch (this.state) {
                     case "running":
-                        next(prev);
-                        break;
+                        if (breakpoint[n.lineno-1]) { this.doPause(n, x, next, prev) } else { next(prev) }
+                       break;
                     case "step-into":
                         if (n.lineno != this.currentLine) {
                             this.doPause(n, x, next, prev);
@@ -187,6 +266,7 @@
                             next(prev);
                         }
                         break;
+                    case "step-back":
                     case "paused":
                         this.doPause(n, x, next, prev);
                         break;
@@ -199,7 +279,7 @@
     </script>
 </head>
 
-<body>
+<body bgcolor='#303030'>
 
 <button id="run-button" onclick="tailspinDebugger.run();">Run</button>
 <button id="stop-button" onclick="tailspinDebugger.stop();">Stop</button>
@@ -207,8 +287,9 @@
 <button id="step-over-button" onclick="tailspinDebugger.stepOver();">Step Over</button>
 <button id="step-into-button" onclick="tailspinDebugger.stepInto();">Step Into</button>
 <button id="step-out-button" onclick="tailspinDebugger.stepOut();">Step Out</button>
+<button id="step-back-button" onclick="tailspinDebugger.stepBack();">Step Back</button>
 
-<textarea id="source">var a = 20;
+<textarea id="source" wrap='off'>var a = 20;
 var b = 5;
 
 function sqr(x) {
@@ -216,7 +297,7 @@ function sqr(x) {
 }
 
 a = a * sqr(b);</textarea>
-<textarea id="console"></textarea>
+<div id="console"></div>
 
 </body>
 </html>

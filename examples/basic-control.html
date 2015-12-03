@@ -51,8 +51,8 @@
             // Callback functions for evaluation.
             var isDone = false; 
             function returnFn(result) {
-                isDone = true;           
                 consoleLog(JSON.stringify(result), "output");
+                isDone = true;           
             }
             function errorFn(result) {
                 consoleLog("ERROR: " + result, 'error');

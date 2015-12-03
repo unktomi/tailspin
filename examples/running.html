@@ -5,6 +5,8 @@
     
     <link rel="stylesheet" type="text/css" href="examples.css">
     
+    <script id='eff' type="text/javascript" src="Effects.js"></script>
+    <script id='eff' type="text/javascript" src="EffectTest.js"></script>
     <script type="text/javascript" src="../tailspin.js"></script>
     
     <script src="lib/codemirror-compressed.js"></script>
@@ -46,10 +48,12 @@
             // Add a single global 'console' that has a log function.
             interpreter.global.console = {
                 log:function(msg) {consoleLog(msg, 'log');}
-            };
-            consoleLog("Welcome to Tailspin...");
+        };
+        run(""+MetaContinuation);
+        run(""+Effects);
+        myConsole.setValue("");
+        run("var f = "+EffectTest + "; f()");
         }
-        
         function consoleLog(msg, logClass) {
             var from = myConsole.posFromIndex(myConsole.getValue().length);
             myConsole.replaceRange(msg+"\n", from);
@@ -61,19 +65,27 @@
         }
         
         function run(source) {
+             // Create an evaluation context that describes the how the code is to be executed.
+            var x = interpreter.createExecutionContext();
+            
+            // Asynchronous running is prefered, so that tailspin execution does not block the browser.
+            x.asynchronous = true;
             // Callback functions for evaluation.
+            var isDone;
             function returnFn(result) {
-                consoleLog(result, "output");
+                consoleLog(result, 'output');
+                isDone = true;
             }
             function errorFn(result) {
                 consoleLog("ERROR: " + result, 'error');
             }
             
-            // Create an evaluation context that describes the how the code is to be executed.
-            var x = interpreter.createExecutionContext();
-            
-            // Asynchronous running is prefered, so that tailspin execution does not block the browser.
-            x.asynchronous = true;
+            x.control = function(n, x, next, prev) {
+                // Continue execution.
+                if (true || !isDone) {
+                    next(prev);
+                }
+            };
             
             // Run the code.
             interpreter.evaluateInContext(source, "console", 0, x, returnFn, errorFn, null);

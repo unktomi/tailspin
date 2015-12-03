@@ -4185,7 +4185,7 @@ var Tailspin = new function() {
         var c = n.children;
         if (c[0].value == "Continuation") {
             next(function(x, r) {
-                ret(x)
+                ret(x);
             });
             return;
         }
