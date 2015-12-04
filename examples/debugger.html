@@ -251,9 +251,9 @@
                 var lineHeight = info.height / mySource.lineCount();
                 var vpos = this.highlightedLine * lineHeight;
                 var margin = 0;
-                if (vpos < top + lineHeight*2 || vpos > bot - lineHeight*2) {
-                    margin = 80;
-                    mySource.scrollIntoView({line: this.highlightedLine}, 80);
+                if (vpos < top + lineHeight || vpos > bot - lineHeight) {
+                    margin = info.clientHeight / 2 - lineHeight;
+                    mySource.scrollIntoView({line: this.highlightedLine}, margin);
                 }
                 this.updateButtons();
             },
