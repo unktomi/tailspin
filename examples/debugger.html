@@ -245,7 +245,16 @@
                 // Highlight the new line.
                 this.highlightedLine = n.lineno-1;
                 mySource.addLineClass(this.highlightedLine, 'background', 'current-line');
-                mySource.scrollIntoView({line: this.highlightedLine});
+                var info = mySource.getScrollInfo();
+                var top = info.top;
+                var bot = top + info.clientHeight;
+                var lineHeight = info.height / mySource.lineCount();
+                var vpos = this.highlightedLine * lineHeight;
+                var margin = 0;
+                if (vpos < top + lineHeight*2 || vpos > bot - lineHeight*2) {
+                    margin = 80;
+                    mySource.scrollIntoView({line: this.highlightedLine}, 80);
+                }
                 this.updateButtons();
             },
             
