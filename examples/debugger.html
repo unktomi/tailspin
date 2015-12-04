@@ -44,50 +44,43 @@
             };
             
             mySource = CodeMirror.fromTextArea(document.getElementById("source"),
-        {lineNumbers:true, mode:"javascript",  gutters: ["CodeMirror-linenumbers", "breakpoints"]});
+                            {lineNumbers:true, mode:"javascript",
+                             gutters: ["CodeMirror-linenumbers", "breakpoints"]});
 
-mySource.on("gutterClick", function(cm, n) {
-  var info = cm.lineInfo(n);
-  breakpoint[n] = info.gutterMarkers == null;
-  cm.setGutterMarker(n, "breakpoints", !breakpoint[n] ? null : makeMarker());
-});
-
-function makeMarker() {
-  var marker = document.createElement("div");
-  marker.style.color = "#822";
-  marker.innerHTML = "●";
-  return marker;
-}
-
-            //var testCode = String(EffectTest);
-            //        var source = "'use strict';" + "\n\n" + MetaContinuation +";\n// Effect Factory\n"+ Effects +"\n\n{"+testCode.substring(testCode.indexOf("\n"));
-        var source = document.getElementById('sourcecode').textContent;
-        mySource.setValue(source);
-//            myConsole = CodeMirror.fromTextArea(document.getElementById("console"),
-//                {readOnly:true, mode:"text"});
+            mySource.on("gutterClick", function(cm, n) {
+                    var info = cm.lineInfo(n);
+                    breakpoint[n] = info.gutterMarkers == null;
+                    cm.setGutterMarker(n, "breakpoints", !breakpoint[n] ? null : makeMarker());
+                });
             
-        jQuery(function($, undefined) {
-                $('#console').terminal(function(command, term) {
-                        initTerm(term);
-                        evaluateInContext(command);
-                    }, {
-                        greetings: 'Evaluate:',
-                            name: 'js_demo',
-                            height: '30%',
-                            history: true,
-                            onInit: initTerm,
-                            prompt: 'js> '});
-            });
-
-
+            function makeMarker() {
+                var marker = document.createElement("div");
+                marker.style.color = "#822";
+                marker.innerHTML = "●";
+                return marker;
+            }
+            
+            var sourcecode = document.getElementById('sourcecode');
+            var source = sourcecode.textContent;
+            mySource.setValue(source);
+            jQuery(function($, undefined) {
+                    $('#console').terminal(function(command, term) {
+                            initTerm(term);
+                            evaluateInContext(command);
+                        }, {
+                            greetings: 'Evaluate:',
+                                name: 'js_demo',
+                                height: '28%',
+                                history: true,
+                                onInit: initTerm,
+                                prompt: 'js> '});
+                });
+            
+            
             // Save the code on changes.
             mySource.on('change', function(cMirror) {
-                localStorage["debugger-source"] = cMirror.getValue();
-        });
-
-        
-
-            
+                    localStorage["debugger-source"] = cMirror.getValue();
+                });
             // Load saved code.
             var savedScript = localStorage["debugger-source"];
             if (typeof savedScript === "string") {
@@ -328,7 +321,7 @@ function makeMarker() {
         
 <div id="console"></div>
 
-<div id='sourcecode' style='visibility:hidden;'>
+<div id='sourcecode' style='height:0px; overflow:hidden;'>
 /** 
  * Algebraic Effects and Handlers as in &lt;a href='http://www.eff-lang.org/'&gt;Eff&lt;/a&gt;
  */
