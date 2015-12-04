@@ -2676,6 +2676,7 @@ var Tailspin = new function() {
         } else {
           x2.thisObject = toObject(t);
         }
+        x2.todo = x.todo;
         x2.functionInstance = this;
         x2.control = x.control;
         x2.asynchronous = x.asynchronous;
@@ -3180,6 +3181,7 @@ var Tailspin = new function() {
           x2.thisObject = toObject(t) || global;
         }
         x2.functionInstance = this;
+        x2.todo = x.todo;  
         x2.control = x.control;
         x2.asynchronous = x.asynchronous;
         x2.stack = x.stack.slice();
@@ -3238,6 +3240,7 @@ var Tailspin = new function() {
       this.type = type;
       this.strict = !!strict;
       this.stack = [];
+      this.todo = [];  
     }
     ExecutionContext.prototype = {
       scope: {
@@ -3258,6 +3261,7 @@ var Tailspin = new function() {
       },
       copy: function() {
         var cpy = new ExecutionContext(this.type, this.strict);
+        cpy.todo = this.todo;
         cpy.scope = this.scope;
         cpy.thisObject = this.thisObject;
         cpy.functionInstance = this.functionInstance;
@@ -4140,7 +4144,7 @@ var Tailspin = new function() {
             forLoop(i + 1, prev);
           }, ret, cont, brk, thrw, prev);
         } else {
-          next(v, prev);
+            if (next) next(v, prev);
         }
       };
       forLoop(0, prev);
@@ -4150,7 +4154,7 @@ var Tailspin = new function() {
       executeGV(c[0], x, function(f, prev, r) {
         execute(c[1], x, function(a, prev) {
             if (typeof f !== "function") {
-            thrw(newTypeError(f + " is not callable", c[0].filename, c[0].lineno), prev);
+            thrw(newTypeError(c[0].value + " is not callable, it is "+f, c[0].filename, c[0].lineno), prev);
           } else {
             var t;
             var options;
@@ -4184,9 +4188,20 @@ var Tailspin = new function() {
     executeFunctions[NEW] = function exNew(n, x, next, ret, cont, brk, thrw, prev) {
         var c = n.children;
         if (c[0].value == "Continuation") {
-            next(function(x, r) {
-                ret(x);
-            });
+            if (x.control) {
+                x.control(n, x, function(p) {
+                    next(function(x, r) {
+                        console.log("continuation called: "+x);
+                        ret(x);
+                        console.log("after continuation: "+JSON.stringify(n));
+                        throw("end-of-continuation");
+                    });
+                }, null);
+            } else {
+                next(function(x, r) {
+                    ret(x);
+                });
+            }
             return;
         }
         executeGV(c[0], x, function(f, prev, ref) {
@@ -4303,7 +4318,7 @@ var Tailspin = new function() {
       execute(n.children[0], x, next, ret, cont, brk, thrw, prev);
     };
     function execute(n, x, next, ret, cont, brk, thrw, prev) {
-      var executeFn = function(prev) {
+       var executeFn = function(prev) {
         try {
           var fn = executeFunctions[n.type];
           if (fn) {
@@ -4315,26 +4330,11 @@ var Tailspin = new function() {
           thrw(sandboxError(e, n.filename, n.lineno), prev);
         }
       };
-      if (x.asynchronous) {
-        var executeFnOriginal = executeFn;
-        executeFn = function(prev) {
-          counter++;
-          if (counter > 200) {
-            counter = 0;
-            setTimeout(function() {
-              executeFnOriginal(prev);
-            }, 0);
-          } else {
-            executeFnOriginal(prev);
-          }
-        };
-      }
       var newPrev = prevDeleteValue(x, "returnedValue", prev);
-      x.currentNode = n;
       if (x.control) {
-        x.control(n, x, executeFn, newPrev);
+           x.control(n, x, executeFn, newPrev);
       } else {
-        executeFn(newPrev);
+          executeFn(newPrev);
       }
     }
     function thunk(f, x) {
@@ -4350,11 +4350,18 @@ var Tailspin = new function() {
         return s;
       }
       try {
+        x.todo = [];
         var ast = Tailspin.Parser.parse(s, f, l, false, sandbox);
         x.strict = !!ast.strict;
           x.execute(ast, function(v, prev) {
           ret(x.result, prev);
-        }, ret, null, null, thrw, prev);
+          }, ret, null, null, thrw, prev);
+          if (!x.asynchronous) {
+              while(x.todo.length > 0) {
+                  console.log("todo: "+x.todo.length);
+                  x.todo.pop()()
+              }
+          }
       } catch (e) {
         thrw(sandboxError(e), prev);
       }

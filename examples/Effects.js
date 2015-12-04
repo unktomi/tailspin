@@ -13,7 +13,8 @@ function callcc(f) {
 }
 
 /**
- * Implementation of delimited continuation operators given by Filinski
+ * Implementation of delimited continuation operators given by 
+ * <a href='http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.43.8213'>Filinski</a>
  */
 
 function MetaContinuation() {
