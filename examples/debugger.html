@@ -275,7 +275,7 @@
                 }
                 switch (this.state) {
                     case "running":
-                        if (breakpoint[n.lineno-1]) { this.doPause(n, x, next, prev) } else {
+                        if (n.lineno != this.currentLine && breakpoint[n.lineno-1]) { this.doPause(n, x, next, prev) } else {
                             resume();
                         }
                        break;
