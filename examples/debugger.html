@@ -147,7 +147,7 @@
             },
             errorFn: function(result) {
                 if (result == "end-of-continuation") return;
-                this.end("Line "+result.sourceLine +": "+result.message, "error");
+                this.end((result.sourceLine ? "Line "+result.sourceLine +": " : "")+result.message, "error");
             },
             start: function() {
                 // Create an evaluation context that describes the how the code is to be executed.
@@ -182,7 +182,7 @@
                 // Run the code.
                 var source = mySource.getValue();
                 try {
-                    interpreter.evaluateInContext(source, "source", 0, x, this.returnFn.bind(this), this.errorFn.bind(this), null);
+                    interpreter.evaluateInContext(source, "", 0, x, this.returnFn.bind(this), this.errorFn.bind(this), null);
                 } catch (e) {
                     term.error("internal debugger error: "+new String(e));
                 }

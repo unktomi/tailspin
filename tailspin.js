@@ -807,7 +807,7 @@ var Tailspin = new function() {
         }
       },
       newError: function(errorClass, m) {
-        m = "[" + (this.filename ? this.filename + ":" : "") + this.lineno + "] " + m;
+        m = (this.filename ? this.filename + ", " : "") + "Line "+this.lineno + ": " + m;
         var e = new errorClass(m, this.filename, this.lineno);
         e.source = this.source;
         e.sourceLine = this.lineno;
