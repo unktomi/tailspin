@@ -479,7 +479,6 @@ function Effects() {
             }
             return new Handler(returnHandler, finallyHandler, ops, hs);
         }
-
         // Operation record
         function Op(name) {
             this.name = name;
@@ -488,6 +487,23 @@ function Effects() {
                 return effect +"#"+name
             }
         }
+
+        // Handler composition
+        function ComposedHandler(h1, h2) {
+            this.h1 = h1;
+            this.h2 = h2;
+        }
+        ComposedHandler.prototype = {
+            handle: function(thunk) {
+                var self = this;
+                return self.h1.handle(function() {
+                        return self.h2.handle(thunk);
+                    });
+            },
+            compose: function(h) {
+                return new ComposedHandler(this, h);
+            }
+        };
 
         // Handler record
         function Handler(returnHandler, finallyHandler, ops, hs) {
@@ -503,9 +519,26 @@ function Effects() {
                 }
                 return result;
             }
+            var self = this;
+            /**
+             * compose - Returns a new handler composed of this and h
+             * @param {Handler} h
+             * @returns {Handler}
+             */
+            this.compose = function(h) {
+                return new ComposedHandler(self, h);
+            }
+
+            /**
+             * handle - handles the provided computation
+             * @param {thunk} the computation
+             */
+
             this.handle = function(thunk) {
                 var saved = [];
                 var finalized = false;
+                var finalizing = false;
+                var abort;
                 function installHandler(op, h) {
                     op.handler = function() {
                         return function(opCall) {
@@ -514,9 +547,11 @@ function Effects() {
                             var args = opCall.args;
                             // operation's continuation
                             var k = opCall.k;
+                            var called = false;
                             var applyCont = function(v) {
                                 // apply the operation's continuation
                                 //var result = k(v);
+                                called = true;
                                 var result = k(arguments[0]); // hack: workaround tailspin bug
                                 if (!returned) { // return now if we haven't already
                                     result = _return(result);
@@ -526,33 +561,42 @@ function Effects() {
                             var result = h.apply(null, args.concat(applyCont));
                             // fell thru - continuation not called
                             returned = true;
-                            if (!finalized) {
-                                finalized = true;
+                            if (!finalizing) {
+                                finalizing = true;
                                 result = _finally(result);
+                                finalized = true;
+                            }
+                            if (finalized && !called) {
+                                // continuation was never called, jump to end of handle
+                                abort(result);
                             }
                             return result;
                         }
                     }
                 }
                 // install handlers
-                for (var i = 0; i &lt; ops.length; i++) {
+                for (var i = 0; i < ops.length; i++) {
                     var op = ops[i];
                     saved.push(op.handler);
                     var h = hs[i];
                     installHandler(op, h);
                 }
                 // perform handling
-                var result = metaCont.reset(function() {
-                    var result = thunk();
-                    result = _return(result);
-                    return result;
+                var result = metaCont.shift(function(k) {
+                    abort = k;
+                    var result = metaCont.reset(function() {
+                        var result = thunk();
+                        result = _return(result);
+                        return result;
+                    });
+                    return k(result);
                 });
                 // perform finally
                 if (!finalized) {
                     result = _finally(result);
                 }
                 // restore previous handlers
-                for (var i = 0; i &lt; saved.length; i++) {
+                for (var i = 0; i < saved.length; i++) {
                     ops[i].handler = saved[i];
                 }
                 return result;
@@ -560,7 +604,7 @@ function Effects() {
         }
 
     }
-    this.toString = function() {return "Eff"}
+    this.toString = function() {return "[Object Eff]"}
 }
 
 function print(x) { console.log(x) }
@@ -653,7 +697,40 @@ result = h.handle(function()
                   });
 print(result); // prints 31
 
+// Transactional state
+function transaction(x) {
+    return {
+        "return": function(v) { return function(s) { return x.value = v; } },
+        "get": function(k) { return function(s) { return k(s)(s) } },
+        "set": function(v, k) { return function(s) { return k()(v) } },
+        "finally": function(f) { var r = f(x.value); return r; }
+    };
+}
+var v = {value: 29};
+var Transact = State.createHandler(transaction(v));
+result = Optionalize.handle(function()
+                            {
+                                return Transact.handle(function()
+                                         {
+                                             var q = get();
+                                             set(q + 11);
+                                             raise("foo");
+                                             var q2 = get();
+                                             return q2;
+                                         });
+                            });
+print(result); // prints none
+print(v.value); // prints 29
+h = Optionalize.compose(Transact); // combined handlers - same effect as above
+result = h.handle(function() {
+        var q = get();
+        set(q + 11);
+        var q2 = get();
+        return q2;
+    });
 
+print(result); // prints some: 40
+print(v.value); // prints 40
 
 </div>
 </body>
