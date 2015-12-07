@@ -97,7 +97,7 @@
             this.currentLine = -1;
             this.continuation = null;
             this.highlightedLine = -1;
-            
+            this.inEval = false;
             this.runButton = document.getElementById("run-button");
             this.stopButton = document.getElementById("stop-button");
             this.pauseButton = document.getElementById("pause-button");
@@ -165,16 +165,21 @@
                                 var cx = dbg.currentScope.copy();
                                 cx.asynchronous = false;
                                 var isDone = false;
+                                dbg.inEval = true;                                        
                                 cx.control = function(n, x, next, prev) {
                                     if(!isDone) next(prev)
                                 }
                                 interpreter.evaluateInContext(command, "", 0, cx, function(result) {
-                                      if (undefined != result) terminal.echo(String(result)); isDone = true;
-                                 }, function(err) { 
-                                      terminal.error(String(err)); isDone = true;
-                                }, null)
+                                      if (undefined != result) terminal.echo(String(result)); isDone = true; dbg.inEval = false;
+                                        }, function(err) {
+                                        if (err == "end-of-continuation") return;
+                                        terminal.error(String(err)); isDone = true; dbg.inEval = false;
+                                }, null);
+                                
                             } catch(e) {
                                 terminal.error("internal debugger error: "+new String(e));
+                            } finally {
+                              dbg.inEval = false;          
                             }
                 }
                 this.updateButtons();
@@ -257,8 +262,8 @@
                 }
                 this.updateButtons();
             },
-            
-        control: function(n, x, next, prev) {
+            control: function(n, x, next, prev) {
+                if (this.inEval) return;                           
                 var self = this;
                 this.currentScope = x;
                 function resume(now) {
@@ -406,19 +411,44 @@ function Effects() {
     var OPS = {}; // Operation records
     var self = this;
 
+    // Handler composition
+    function ComposedHandler(h1, h2) {
+        this.h1 = h1;
+        this.h2 = h2;
+    }
+    ComposedHandler.prototype = {
+        handle: function(thunk) {
+            var self = this;
+            return self.h1.handle(function() {
+                return self.h2.handle(thunk);
+            });
+        },
+        compose: function(h) {
+            return new ComposedHandler(this, h);
+        }
+    };
+    
     /**
      * Creates a new Effect
      * @param {string} effect - Name of this effect
      * @returns {Effect}
      */
+    var effectId = 0;
     this.createEffect = function(effect) {
+        if (undefined == effect) {
+            var id = ++effectId;
+            effect = "Eff#"+id;
+        }
         return new Effect(effect);
     }
 
+    
     /** 
      * Factory to create operations and handlers:
      */
     function Effect(effect) {
+
+        var thisEffect = this;
 
         /**
          * Creates a new operation.
@@ -452,10 +482,11 @@ function Effects() {
          * Creates a new handler
          * @param {object} handlers - an object with function properties which may be 'return', 'finally' or 
          * the names of operations
+         * @param {object} resource - optional resource to use with default handler
          * @returns {function}
          */
 
-        this.createHandler = function(handlers) {
+        this.createHandler = function(handlers, resource) {
             var returnHandler = handlers["return"];
             var finallyHandler = handlers["finally"];
             var ops = [];
@@ -473,12 +504,38 @@ function Effects() {
                         op = new Op(opName);
                         OPS[key] = op;
                     }
+                    if (resource) {
+                        function installHandler(op, h) {
+                            op.handler = function() {
+                                return function(opCall) {
+                                    var args = opCall.args;
+                                    var k = opCall.k;
+                                    return h.apply(resource, args.concat(k));
+                                }
+                            }
+                        }
+                        installHandler(op, h);
+                    }
                     ops.push(op);
                     hs.push(h);
                 }
             }
             return new Handler(returnHandler, finallyHandler, ops, hs);
         }
+
+        /**
+         * Creates a new default handler - will be called for top-level operations
+         * @param {object} handlers - an object with function properties which may be 'return', 'finally' or 
+         * the names of operations
+         * @param {object} resource - resource to use with this default handler
+         * @returns {function}
+         */
+
+        this.createDefaultHandler = function(handlers, resource) {
+            if (undefined == resource) resource = true;
+            return thisEffect.createHandler(handlers, resource);
+        }
+
         // Operation record
         function Op(name) {
             this.name = name;
@@ -488,25 +545,9 @@ function Effects() {
             }
         }
 
-        // Handler composition
-        function ComposedHandler(h1, h2) {
-            this.h1 = h1;
-            this.h2 = h2;
-        }
-        ComposedHandler.prototype = {
-            handle: function(thunk) {
-                var self = this;
-                return self.h1.handle(function() {
-                        return self.h2.handle(thunk);
-                    });
-            },
-            compose: function(h) {
-                return new ComposedHandler(this, h);
-            }
-        };
 
         // Handler record
-        function Handler(returnHandler, finallyHandler, ops, hs) {
+        function Handler(returnHandler, finallyHandler, ops, hs, resource) {
             function _return(result) {
                 if (undefined != returnHandler) {
                     result = returnHandler(result);
@@ -558,7 +599,7 @@ function Effects() {
                                 }
                                 return result;
                             }
-                            var result = h.apply(null, args.concat(applyCont));
+                            var result = h.apply(resource, args.concat(applyCont));
                             // fell thru - continuation not called
                             returned = true;
                             if (!finalizing) {
@@ -575,7 +616,7 @@ function Effects() {
                     }
                 }
                 // install handlers
-                for (var i = 0; i < ops.length; i++) {
+                for (var i = 0; i &lt; ops.length; i++) {
                     var op = ops[i];
                     saved.push(op.handler);
                     var h = hs[i];
@@ -596,7 +637,7 @@ function Effects() {
                     result = _finally(result);
                 }
                 // restore previous handlers
-                for (var i = 0; i < saved.length; i++) {
+                for (var i = 0; i &lt; saved.length; i++) {
                     ops[i].handler = saved[i];
                 }
                 return result;
@@ -608,6 +649,7 @@ function Effects() {
 }
 
 function print(x) { console.log(x) }
+
 var exit = new Continuation();
 
 var Eff = new Effects();
@@ -731,6 +773,61 @@ result = h.handle(function() {
 
 print(result); // prints some: 40
 print(v.value); // prints 40
+
+/**
+ * Simulation of Eff Resources - i.e. a default handler with state
+ */
+function Ref(v) {
+    var eff = Eff.createEffect();
+    this.get = eff.createOperation("get");
+    this.set = eff.createOperation("set");
+    this.createHandler = eff.createHandler;
+    // state
+    var resource = {value: v};
+    // create a default handler 
+    var h = eff.createDefaultHandler({
+        get: function(k) {
+            k(resource.value);
+        },
+        set: function(v, k) {
+            resource.value = v; k();
+        }
+        
+    });
+    this.handle = h.handle;
+    this.compose = function(h1) {
+        return new Eff.ComposedHandler(h, h1);
+    }
+}
+
+var ref = new Ref(20);
+
+print(ref.get()); // prints 20
+
+ref.handle(function() {
+    print(ref.get()); // prints 20
+    ref.set(99);
+    print(ref.get()); // prints 99
+});
+
+print(ref.get()); // prints 99
+
+h = ref.createHandler({
+    get: function(k) {
+        k(-1);
+    }
+});
+
+h.handle(function() {
+    print(ref.get()); // prints -1
+    ref.handle(function() {
+        print(ref.get()); // prints 99
+        ref.set(101);
+    });
+    print(ref.get()); // prints -1
+});
+
+print(ref.get()); // prints 101
 
 </div>
 </body>
