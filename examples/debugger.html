@@ -829,6 +829,24 @@ h.handle(function() {
 
 print(ref.get()); // prints 101
 
+// Delimited continuations
+function testDelimitedControl() {
+    var Delimited = Eff.createEffect();
+    var shift = Delimited.createOperation("shift");
+    var reset = Delimited.createHandler({
+        shift: function(f, k) {
+            return f(k)
+        }
+    }).handle;
+    print(reset(function() {
+        return shift(function(k) {
+            return k(k(k(7)))
+        }) * 2 + 1;
+    })); // prints 63
+}
+testDelimitedControl();
+
+
 </div>
 </body>
 </html>
